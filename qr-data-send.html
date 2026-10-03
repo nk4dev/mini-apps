@@ -5,17 +5,16 @@
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
 <title>QR転送プロト</title>
 <style>
-/* レイアウト: 1カラムの作業台。上にモード切替、下に1つの操作面(QR表示またはカメラ)と進捗 */
+/* レイアウト: 1カラム。上部のタブで送信/受信を切り替え、各画面は「入力 → 1つの主操作 → 結果」の順に並べる */
 :root {
   --bg: #f2f5f7;
   --surface: #ffffff;
   --ink: #13202b;
-  --muted: #566878;
-  --line: #d3dbe2;
+  --muted: #5d6e7d;
+  --line: #d9e0e6;
   --accent: #0b7a75;
   --accent-ink: #ffffff;
   --ok: #17803f;
-  --warn: #9a5b00;
   --bad: #b3261e;
   --cell: #cbd5dd;
   --font-body: system-ui, -apple-system, "Hiragino Sans", "Yu Gothic UI", "Noto Sans JP", sans-serif;
@@ -25,13 +24,13 @@
 @media (prefers-color-scheme: dark) {
   :root:not([data-theme="light"]) {
     --bg: #0e151b; --surface: #16202a; --ink: #e5edf3; --muted: #93a4b3; --line: #2a3945;
-    --accent: #3fc7bd; --accent-ink: #05201e; --ok: #4cc38a; --warn: #e0a24a; --bad: #ff7b72; --cell: #2a3945;
+    --accent: #3fc7bd; --accent-ink: #05201e; --ok: #4cc38a; --bad: #ff7b72; --cell: #2a3945;
     color-scheme: dark;
   }
 }
 :root[data-theme="dark"] {
   --bg: #0e151b; --surface: #16202a; --ink: #e5edf3; --muted: #93a4b3; --line: #2a3945;
-  --accent: #3fc7bd; --accent-ink: #05201e; --ok: #4cc38a; --warn: #e0a24a; --bad: #ff7b72; --cell: #2a3945;
+  --accent: #3fc7bd; --accent-ink: #05201e; --ok: #4cc38a; --bad: #ff7b72; --cell: #2a3945;
   color-scheme: dark;
 }
 
@@ -43,94 +42,108 @@ body {
   color: var(--ink);
   font: 15px/1.6 var(--font-body);
   padding-inline: 16px;
-  padding-block: max(20px, env(safe-area-inset-top, 0px)) max(32px, env(safe-area-inset-bottom, 0px));
+  padding-block: max(24px, env(safe-area-inset-top, 0px)) max(32px, env(safe-area-inset-bottom, 0px));
 }
-main { max-width: 720px; margin-inline: auto; display: flex; flex-direction: column; gap: 20px; }
-h1 { font-size: 1.5rem; line-height: 1.25; margin: 0; letter-spacing: 0.01em; text-wrap: balance; }
-h2 { font-size: 0.8rem; margin: 0 0 8px; color: var(--muted); letter-spacing: 0.08em; font-weight: 600; }
+main { max-width: 560px; margin-inline: auto; display: flex; flex-direction: column; gap: 22px; }
+h1 { font-size: 1.4rem; line-height: 1.25; margin: 0; }
 p { margin: 0; }
-.lede { color: var(--muted); margin-top: 6px; max-width: 60ch; }
-.proto-tag { font: 12px var(--font-data); color: var(--muted); margin-top: 8px; overflow-wrap: anywhere; }
-
-.tabs { display: grid; grid-template-columns: repeat(3, 1fr); border: 1px solid var(--line); border-radius: 8px; overflow: hidden; background: var(--surface); }
-.tabs button {
-  appearance: none; border: 0; background: transparent; color: var(--muted);
-  font: inherit; font-weight: 600; padding: 11px 8px; cursor: pointer; min-width: 0;
-}
-.tabs button + button { border-left: 1px solid var(--line); }
-.tabs button[aria-selected="true"] { background: var(--accent); color: var(--accent-ink); }
+header p { text-wrap: balance; }
+.muted { color: var(--muted); }
+.hint { font-size: 0.82rem; color: var(--muted); }
 :focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
 
-section[data-panel] { display: flex; flex-direction: column; gap: 16px; min-width: 0; }
+/* タブ: 下線で現在地を示すだけにする */
+.tabs { display: flex; gap: 22px; border-bottom: 1px solid var(--line); }
+.tabs button {
+  appearance: none; border: 0; border-bottom: 2px solid transparent; margin-bottom: -1px;
+  background: none; color: var(--muted); font: inherit; font-weight: 600; padding: 8px 2px; cursor: pointer;
+}
+.tabs button[aria-selected="true"] { color: var(--ink); border-bottom-color: var(--accent); }
+
+section[data-panel] { display: flex; flex-direction: column; gap: 18px; min-width: 0; }
 .field { display: flex; flex-direction: column; gap: 6px; min-width: 0; }
-.field label, .label { font-size: 0.85rem; color: var(--muted); font-weight: 600; }
+.label, .field > label { font-size: 0.85rem; color: var(--muted); font-weight: 600; }
 textarea, select, input[type="file"], input[type="url"], input[type="text"] {
   width: 100%; font: inherit; color: var(--ink); background: var(--surface);
   border: 1px solid var(--line); border-radius: 6px; padding: 10px;
 }
-textarea { min-height: 96px; resize: vertical; font-family: var(--font-data); font-size: 13px; }
-.row { display: flex; gap: 12px; flex-wrap: wrap; align-items: end; }
+textarea { min-height: 110px; resize: vertical; }
+.row { display: flex; gap: 12px 16px; flex-wrap: wrap; }
 .row > * { flex: 1 1 140px; min-width: 0; }
 .range { display: flex; align-items: center; gap: 10px; }
 .range input { flex: 1; min-width: 0; accent-color: var(--accent); }
 .range output { font: 13px var(--font-data); min-width: 3.4em; text-align: right; }
+.check { display: flex; align-items: center; gap: 8px; font-size: 0.88rem; color: var(--muted); cursor: pointer; }
+.check input { accent-color: var(--accent); }
 
-.btns { display: flex; gap: 10px; flex-wrap: wrap; }
+/* 選択式のボタン列(送るもの・読み取りやすさ) */
+.seg { display: inline-flex; align-self: flex-start; max-width: 100%; border: 1px solid var(--line); border-radius: 8px; overflow: hidden; background: var(--surface); }
+.seg button { appearance: none; border: 0; background: none; color: var(--muted); font: inherit; font-weight: 600; padding: 7px 16px; cursor: pointer; min-width: 0; }
+.seg button + button { border-left: 1px solid var(--line); }
+.seg button[aria-pressed="true"] { background: var(--ink); color: var(--bg); }
+
+.btns { display: flex; gap: 10px; flex-wrap: wrap; align-items: center; }
 button.btn {
   appearance: none; font: inherit; font-weight: 600; cursor: pointer;
-  padding: 10px 16px; border-radius: 6px; border: 1px solid var(--line);
+  padding: 10px 18px; border-radius: 6px; border: 1px solid var(--line);
   background: var(--surface); color: var(--ink);
 }
 button.btn.primary { background: var(--accent); border-color: var(--accent); color: var(--accent-ink); }
 button.btn:disabled { opacity: 0.45; cursor: not-allowed; }
+button.link { appearance: none; border: 0; background: none; padding: 0; font: inherit; color: var(--muted); text-decoration: underline; cursor: pointer; }
 
-.stage { display: flex; flex-direction: column; align-items: center; gap: 12px; }
+details.adv summary, details.more summary { cursor: pointer; font-size: 0.88rem; color: var(--muted); font-weight: 600; }
+details.adv[open] summary { margin-bottom: 14px; }
+details.adv > .stack { display: flex; flex-direction: column; gap: 14px; }
+
+.status { font-size: 0.9rem; min-height: 1.4em; }
+.status:empty { display: none; }
+.status.bad { color: var(--bad); }
+
+/* 送信中の表示 */
+.stage { display: flex; flex-direction: column; align-items: center; gap: 10px; }
 /* QRは常に白地・黒。テーマに関わらず固定し、周囲に十分な余白(静寂領域)を取る */
-.qrbox { background: #fff; border: 1px solid var(--line); border-radius: 8px; padding: 8px; width: min(100%, 560px); }
+.qrbox { background: #fff; border: 1px solid var(--line); border-radius: 8px; padding: 8px; width: 100%; }
 .qrbox canvas { display: block; width: 100%; height: auto; }
+.counter { font: 600 1.05rem var(--font-data); font-variant-numeric: tabular-nums; }
+.stats { font-size: 0.82rem; color: var(--muted); text-align: center; }
 .stage:fullscreen { justify-content: center; background: var(--bg); padding: 16px; }
-.stage:fullscreen .qrbox { width: min(94vw, calc(100vh - 120px)); }
+.stage:fullscreen .qrbox { width: min(94vw, calc(100vh - 130px)); }
 .stage:fullscreen .tips, .stage:fullscreen .stats { display: none; }
-details.adv { border: 1px solid var(--line); border-radius: 8px; background: var(--surface); padding: 10px 12px; }
-details.adv summary { cursor: pointer; font-size: 0.88rem; color: var(--muted); font-weight: 600; }
-details.adv[open] summary { margin-bottom: 12px; }
-.counter { font: 600 1.1rem var(--font-data); font-variant-numeric: tabular-nums; }
-.stats { font: 12.5px/1.7 var(--font-data); color: var(--muted); text-align: center; overflow-wrap: anywhere; }
 
-.video { position: relative; width: min(100%, 520px); aspect-ratio: 4 / 3; background: #0b0f13; border-radius: 8px; overflow: hidden; margin-inline: auto; }
+/* 受信 */
+.video { position: relative; width: 100%; aspect-ratio: 4 / 3; background: #0b0f13; border-radius: 8px; overflow: hidden; }
 .video video, .video canvas { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; }
 .video .idle { position: absolute; inset: 0; display: grid; place-items: center; color: #9fb0bf; font-size: 0.9rem; padding: 16px; text-align: center; }
-
 .progress { display: flex; flex-direction: column; gap: 8px; }
 .progress canvas { width: 100%; height: auto; image-rendering: pixelated; display: block; }
 .bar { height: 6px; border-radius: 3px; background: var(--cell); overflow: hidden; }
 .bar > i { display: block; height: 100%; width: 0; background: var(--accent); transition: width 0.12s linear; }
 .readout { display: flex; justify-content: space-between; gap: 12px; flex-wrap: wrap; font: 13px var(--font-data); font-variant-numeric: tabular-nums; }
-.readout .muted { color: var(--muted); }
 
-code { font: 12px var(--font-data); background: var(--bg); border: 1px solid var(--line); border-radius: 4px; padding: 0 4px; overflow-wrap: anywhere; }
-.check { display: flex; align-items: center; gap: 8px; font-size: 0.88rem; color: var(--muted); cursor: pointer; }
-.check input { accent-color: var(--accent); }
-.viewer { display: flex; flex-direction: column; gap: 8px; min-width: 0; }
-.viewopts { display: flex; gap: 8px 18px; flex-wrap: wrap; }
-.viewer iframe { display: block; width: 100%; height: min(70vh, 480px); border: 1px solid var(--line); border-radius: 6px; background: #fff; }
-.notice { font-size: 0.85rem; color: var(--muted); border-left: 2px solid var(--line); padding-left: 10px; }
-.notice.warn { border-color: var(--warn); color: var(--warn); }
-.status { font-size: 0.9rem; min-height: 1.4em; }
-.status.bad { color: var(--bad); }
+.meta { display: flex; flex-wrap: wrap; gap: 2px 12px; align-items: baseline; font-size: 0.92rem; }
+.meta strong { overflow-wrap: anywhere; }
+.meta .url { flex-basis: 100%; font: 12px var(--font-data); overflow-wrap: anywhere; }
 
-.result { border: 1px solid var(--line); border-radius: 8px; background: var(--surface); padding: 14px; display: flex; flex-direction: column; gap: 10px; min-width: 0; }
-.result dl { margin: 0; display: grid; grid-template-columns: auto 1fr; gap: 4px 12px; font-size: 0.9rem; }
+.result { border: 1px solid var(--line); border-radius: 8px; background: var(--surface); padding: 14px; display: flex; flex-direction: column; gap: 12px; min-width: 0; }
+.reshead { display: flex; justify-content: space-between; align-items: baseline; gap: 12px; }
+.reshead strong { overflow-wrap: anywhere; }
+.result dl { margin: 10px 0 0; display: grid; grid-template-columns: auto 1fr; gap: 4px 12px; font-size: 0.88rem; }
 .result dt { color: var(--muted); }
-.result dd { margin: 0; font-family: var(--font-data); font-size: 13px; overflow-wrap: anywhere; }
-.badge { display: inline-block; font: 600 12px var(--font-data); padding: 2px 8px; border-radius: 4px; border: 1px solid currentColor; }
+.result dd { margin: 0; font: 12.5px var(--font-data); overflow-wrap: anywhere; }
+.badge { flex: none; font: 600 12px var(--font-data); padding: 2px 8px; border-radius: 4px; border: 1px solid currentColor; }
 .badge.ok { color: var(--ok); }
 .badge.ng { color: var(--bad); }
-pre.preview { margin: 0; max-height: 220px; overflow: auto; background: var(--bg); border: 1px solid var(--line); border-radius: 6px; padding: 10px; font: 12.5px/1.5 var(--font-data); white-space: pre-wrap; overflow-wrap: anywhere; }
+.viewer { display: flex; flex-direction: column; gap: 8px; min-width: 0; }
+.viewopts { display: flex; gap: 6px 18px; flex-wrap: wrap; }
+.viewer iframe { display: block; width: 100%; height: min(60vh, 440px); border: 1px solid var(--line); border-radius: 6px; background: #fff; }
+pre.preview { margin: 0; max-height: 240px; overflow: auto; background: var(--bg); border: 1px solid var(--line); border-radius: 6px; padding: 10px; font: 12.5px/1.5 var(--font-data); white-space: pre-wrap; overflow-wrap: anywhere; }
 
 .log { font: 12.5px/1.7 var(--font-data); background: var(--surface); border: 1px solid var(--line); border-radius: 8px; padding: 12px; min-height: 120px; white-space: pre-wrap; overflow-wrap: anywhere; }
 .log .pass { color: var(--ok); }
 .log .fail { color: var(--bad); }
+
+footer { display: flex; justify-content: space-between; align-items: baseline; gap: 12px; flex-wrap: wrap; font-size: 0.8rem; color: var(--muted); padding-top: 4px; }
 
 @media (prefers-reduced-motion: reduce) { .bar > i { transition: none; } }
 </style>
@@ -139,76 +152,90 @@ pre.preview { margin: 0; max-height: 220px; overflow: auto; background: var(--bg
 <main>
   <header>
     <h1>QR転送プロト</h1>
-    <p class="lede">データを連続QRコードに分割して表示し、別の端末のカメラで読み取って復元します。通信は使いません。</p>
-    <p class="proto-tag">QT2 / 先頭にメタ情報 + 分割 + CRC32 + gzip + SHA-256 / Base45(英数字モードQR)</p>
+    <p class="muted">連続したQRコードで、データを別の端末へ移します。</p>
   </header>
 
   <div class="tabs" role="tablist">
     <button type="button" role="tab" data-tab="send" aria-selected="true">送信</button>
     <button type="button" role="tab" data-tab="recv" aria-selected="false">受信</button>
-    <button type="button" role="tab" data-tab="test" aria-selected="false">セルフテスト</button>
   </div>
 
   <!-- 送信 -->
   <section data-panel="send">
     <div class="field">
-      <label for="url">サイトのURL(入力するとHTMLを取得して送る。ファイル・テキストより優先)</label>
-      <input id="url" type="url" inputmode="url" placeholder="https://example.com/" autocomplete="off" spellcheck="false">
+      <span class="label">送るもの</span>
+      <div class="seg" id="src" role="group" aria-label="送るもの">
+        <button type="button" data-src="text" aria-pressed="true">テキスト</button>
+        <button type="button" data-src="url" aria-pressed="false">サイトのURL</button>
+        <button type="button" data-src="file" aria-pressed="false">ファイル</button>
+      </div>
     </div>
-    <div class="field">
-      <label for="proxy">直接取得できないときのプロキシ(<code>{url}</code>が対象URLに置き換わる。空欄ならプロキシなし)</label>
-      <input id="proxy" type="text" value="https://api.allorigins.win/raw?url={url}" autocomplete="off" spellcheck="false">
-      <p class="notice">多くのサイトはブラウザの制限(CORS)で直接取得できません。プロキシを使うと、取得するURLがそのサービスに渡ります。同梱のserve.jsを使う場合は <code>/proxy?url={url}</code> にします。</p>
-    </div>
-    <div class="field">
-      <label for="text">送るテキスト</label>
+
+    <div class="field" id="srcText">
+      <label for="text" class="label">テキスト</label>
       <textarea id="text" spellcheck="false">こんにちは。これはQRコードだけで転送されたテキストです。
 Hello from a stream of QR codes.</textarea>
-      <label class="check"><input type="checkbox" id="textIsHtml"> このテキストをHTMLとして送る(取得できないサイトのHTMLを貼る用)</label>
+      <label class="check"><input type="checkbox" id="textIsHtml"> HTMLとして送る</label>
     </div>
-    <div class="field">
-      <label for="file">またはファイル(1MBまで。選ぶとテキストより優先)</label>
+    <div class="field" id="srcUrl" hidden>
+      <label for="url" class="label">URL(HTMLを取得して送ります)</label>
+      <input id="url" type="url" inputmode="url" placeholder="https://example.com/" autocomplete="off" spellcheck="false">
+    </div>
+    <div class="field" id="srcFile" hidden>
+      <label for="file" class="label">ファイル(1MBまで)</label>
       <input id="file" type="file">
     </div>
+
     <div class="field">
-      <label for="preset">読み取りやすさ</label>
-      <select id="preset">
-        <option value="stable">安定: QRを大きく粗く(遅い)</option>
-        <option value="normal" selected>標準</option>
-        <option value="fast">高速: QRが細かい(読み取り側の条件が良いとき)</option>
-        <option value="custom">カスタム</option>
-      </select>
+      <span class="label">読み取りやすさ</span>
+      <div class="seg" id="preset" role="group" aria-label="読み取りやすさ">
+        <button type="button" data-preset="stable" aria-pressed="false">安定</button>
+        <button type="button" data-preset="normal" aria-pressed="true">標準</button>
+        <button type="button" data-preset="fast" aria-pressed="false">高速</button>
+      </div>
+      <p class="hint">安定はQRが大きく粗くなり、読み取りやすい代わりに遅くなります。</p>
     </div>
+
     <details class="adv">
       <summary>詳細設定</summary>
-    <div class="row">
-      <div class="field">
-        <span class="label">1フレームのデータ量</span>
-        <div class="range"><input id="chunk" type="range" min="80" max="800" step="20" value="200" aria-label="1フレームのデータ量"><output id="chunkOut">200 B</output></div>
+      <div class="stack">
+        <div class="row">
+          <div class="field">
+            <span class="label">1フレームのデータ量</span>
+            <div class="range"><input id="chunk" type="range" min="80" max="800" step="20" value="200" aria-label="1フレームのデータ量"><output id="chunkOut">200 B</output></div>
+          </div>
+          <div class="field">
+            <span class="label">表示速度</span>
+            <div class="range"><input id="fps" type="range" min="1" max="15" step="1" value="4" aria-label="表示速度"><output id="fpsOut">4 fps</output></div>
+          </div>
+        </div>
+        <div class="field">
+          <label for="ecc" class="label">誤り訂正</label>
+          <select id="ecc"><option value="L">L (7%)</option><option value="M" selected>M (15%)</option><option value="Q">Q (25%)</option></select>
+        </div>
+        <div class="field">
+          <label for="proxy" class="label">URL取得のプロキシ</label>
+          <input id="proxy" type="text" value="https://api.allorigins.win/raw?url={url}" autocomplete="off" spellcheck="false">
+          <p class="hint">多くのサイトは、ブラウザの制限で直接取得できません。直接取得に失敗したときだけ、ここを経由します({url}が対象のURLになります)。経由するサービスには取得先のURLが渡ります。同梱のserve.jsなら /proxy?url={url} です。空欄でプロキシなし。</p>
+        </div>
       </div>
-      <div class="field">
-        <span class="label">表示速度</span>
-        <div class="range"><input id="fps" type="range" min="1" max="15" step="1" value="4" aria-label="表示速度"><output id="fpsOut">4 fps</output></div>
-      </div>
-      <div class="field">
-        <label for="ecc">誤り訂正</label>
-        <select id="ecc"><option value="L">L (7%)</option><option value="M" selected>M (15%)</option><option value="Q">Q (25%)</option></select>
-      </div>
-    </div>
     </details>
-    <div class="btns">
-      <button type="button" class="btn primary" id="sendStart">QRを流す</button>
-      <button type="button" class="btn" id="sendFull" disabled>全画面</button>
-      <button type="button" class="btn" id="sendToggle" disabled>一時停止</button>
-      <button type="button" class="btn" id="sendPrev" disabled aria-label="前のフレーム">◀</button>
-      <button type="button" class="btn" id="sendNext" disabled aria-label="次のフレーム">▶</button>
-    </div>
+
+    <div class="btns"><button type="button" class="btn primary" id="sendStart">QRを流す</button></div>
     <div class="status" id="sendMsg" role="status"></div>
+
     <div class="stage" id="sendStage" hidden>
       <div class="qrbox"><canvas id="qr" aria-label="転送中のQRコード"></canvas></div>
       <div class="counter" id="sendCounter">0 / 0</div>
+      <div class="btns">
+        <button type="button" class="btn" id="sendToggle" disabled>一時停止</button>
+        <button type="button" class="btn" id="sendPrev" disabled aria-label="前のフレーム">◀</button>
+        <button type="button" class="btn" id="sendNext" disabled aria-label="次のフレーム">▶</button>
+        <button type="button" class="btn" id="sendFull" disabled>全画面</button>
+        <button type="button" class="btn" id="sendGif" disabled>GIFで保存</button>
+      </div>
       <div class="stats" id="sendStats"></div>
-      <p class="notice tips">画面の明るさを最大にし、自動消灯をオフにします。受信側はQR全体が映る距離で、ピントが合うまで待ってください。</p>
+      <p class="hint tips">画面の明るさを上げて、QR全体が受信側に映るようにしてください。</p>
     </div>
   </section>
 
@@ -220,9 +247,10 @@ Hello from a stream of QR codes.</textarea>
       <div class="idle" id="videoIdle">カメラは停止中です</div>
     </div>
     <div class="btns">
-      <button type="button" class="btn primary" id="camStart">カメラを開始</button>
-      <button type="button" class="btn" id="camStop" disabled>停止</button>
-      <button type="button" class="btn" id="recvReset">受信をリセット</button>
+      <button type="button" class="btn primary" id="camToggle">カメラを開始</button>
+      <button type="button" class="btn" id="imgBtn">画像から復元</button>
+      <input id="imgIn" type="file" accept="image/gif,image/png,image/jpeg" multiple hidden>
+      <button type="button" class="link" id="recvReset">リセット</button>
     </div>
     <div class="field" id="zoomWrap" hidden>
       <span class="label">ズーム</span>
@@ -230,53 +258,56 @@ Hello from a stream of QR codes.</textarea>
     </div>
     <div class="status" id="recvMsg" role="status">送信側のQRにカメラを向けてください。</div>
     <div class="progress">
-      <div class="readout"><span id="recvCount">0 / 0</span><span class="muted" id="recvInfo">待機中</span></div>
+      <div class="readout"><span id="recvCount">0 / 0</span><span class="muted" id="recvInfo"></span></div>
       <div class="bar"><i id="recvBar"></i></div>
       <canvas id="grid" width="640" height="16" aria-label="受信済みフレームの一覧"></canvas>
     </div>
-    <div class="result" id="metaCard" hidden>
-      <div><span class="badge ok">メタ情報を受信</span></div>
-      <dl>
-        <dt>名前</dt><dd id="metaName"></dd>
-        <dt>種類</dt><dd id="metaMime"></dd>
-        <dt>サイズ</dt><dd id="metaSize"></dd>
-        <dt>フレーム数</dt><dd id="metaFrames"></dd>
-        <dt>取得元</dt><dd id="metaUrl"></dd>
-        <dt>SHA-256</dt><dd id="metaHash"></dd>
-      </dl>
+    <div class="meta" id="metaCard" hidden>
+      <strong id="metaName"></strong>
+      <span class="muted"><span id="metaSize"></span> · <span id="metaFrames"></span> · <span id="metaMime"></span></span>
+      <span class="muted url" id="metaUrl"></span>
     </div>
     <div class="result" id="result" hidden>
-      <div><span class="badge" id="resBadge"></span></div>
-      <dl>
-        <dt>名前</dt><dd id="resName"></dd>
-        <dt>サイズ</dt><dd id="resSize"></dd>
-        <dt>種類</dt><dd id="resMime"></dd>
-        <dt>SHA-256</dt><dd id="resHash"></dd>
-      </dl>
+      <div class="reshead"><strong id="resName"></strong><span class="badge" id="resBadge"></span></div>
+      <div class="muted" id="resSize"></div>
       <div class="viewer" id="viewer" hidden>
+        <iframe id="resFrame" title="復元したHTMLの表示" sandbox="allow-popups allow-popups-to-escape-sandbox"></iframe>
         <div class="viewopts">
           <label class="check"><input type="checkbox" id="optBase" checked> 元サイトのCSS・画像を読み込む</label>
           <label class="check"><input type="checkbox" id="optScript"> スクリプトを実行する</label>
         </div>
-        <iframe id="resFrame" title="復元したHTMLの表示" sandbox="allow-popups allow-popups-to-escape-sandbox"></iframe>
-        <p class="notice" id="viewNote"></p>
+        <p class="hint" id="viewNote"></p>
       </div>
       <pre class="preview" id="resPreview" hidden></pre>
       <div class="btns">
-        <button type="button" class="btn" id="resView" hidden>ソースを表示</button>
         <button type="button" class="btn primary" id="resDownload">ダウンロード</button>
-        <button type="button" class="btn" id="resCopy" hidden>テキストをコピー</button>
+        <button type="button" class="btn" id="resView" hidden>ソースを表示</button>
+        <button type="button" class="btn" id="resCopy" hidden>コピー</button>
       </div>
+      <details class="more">
+        <summary>詳細</summary>
+        <dl>
+          <dt>種類</dt><dd id="resMime"></dd>
+          <dt>SHA-256</dt><dd id="resHash"></dd>
+        </dl>
+      </details>
     </div>
-    <p class="notice">カメラはHTTPSまたはlocalhostで開いたページでのみ使えます。別の端末の画面をなるべく正面から、画面全体が写るように読み取ってください。</p>
   </section>
 
   <!-- セルフテスト -->
   <section data-panel="test" hidden>
-    <p class="notice">カメラなしで、QRの生成と読み取りを同じページ内で往復します。欠落、順不同、重複、壊れたフレームを混ぜて、復元できるかを確かめます。</p>
-    <div class="btns"><button type="button" class="btn primary" id="testRun">テストを実行</button></div>
+    <p class="muted">カメラなしで、QRの生成と読み取りをこのページ内で往復します。欠落、順不同、重複、壊れたフレームを混ぜて、復元できるかを確かめます。</p>
+    <div class="btns">
+      <button type="button" class="btn primary" id="testRun">テストを実行</button>
+      <button type="button" class="link" data-go="send">戻る</button>
+    </div>
     <div class="log" id="testLog" role="log">未実行</div>
   </section>
+
+  <footer>
+    <span>QT2 · メタ情報 + 分割 + CRC32 + gzip + SHA-256</span>
+    <button type="button" class="link" data-go="test">セルフテスト</button>
+  </footer>
 </main>
 
 <script>//---------------------------------------------------------------------
@@ -12913,6 +12944,332 @@ const QT = (() => {
 
 if (typeof module !== 'undefined') module.exports = QT;
 </script>
+<script>// QR画像の描画(右下の署名つき)と、GIFの書き出し・読み込み。外部ライブラリなし。
+
+// ---------- QR画像 ----------
+// 画像は「QR本体(静寂領域4モジュールを含む正方形)」の下に、署名用の帯を足した形。
+// 署名は静寂領域の外側に置くので、QRの読み取りには影響しない。
+// 文字は5×7のビットマップで描く(フォントに依存せず、2色のまま・どの環境でも同じ見た目になる)。
+const QTImage = (() => {
+  const SIGNATURE = 'QR-data-sender@nk4dev';
+  const PALETTE = [[255, 255, 255], [0, 0, 0]]; // 0=白, 1=黒
+
+  const GLYPHS = {
+    Q: ['01110', '10001', '10001', '10001', '10101', '10010', '01101'],
+    R: ['11110', '10001', '10001', '11110', '10100', '10010', '10001'],
+    '-': ['00000', '00000', '00000', '11111', '00000', '00000', '00000'],
+    d: ['00001', '00001', '01101', '10011', '10001', '10011', '01101'],
+    a: ['00000', '00000', '01110', '00001', '01111', '10001', '01111'],
+    t: ['01000', '01000', '11100', '01000', '01000', '01001', '00110'],
+    s: ['00000', '00000', '01110', '10000', '01110', '00001', '11110'],
+    e: ['00000', '00000', '01110', '10001', '11111', '10000', '01110'],
+    n: ['00000', '00000', '10110', '11001', '10001', '10001', '10001'],
+    r: ['00000', '00000', '10110', '11001', '10000', '10000', '10000'],
+    '@': ['01110', '10001', '10111', '10101', '10111', '10000', '01110'],
+    k: ['10000', '10000', '10010', '10100', '11000', '10100', '10010'],
+    4: ['00010', '00110', '01010', '10010', '11111', '00010', '00010'],
+    v: ['00000', '00000', '10001', '10001', '10001', '01010', '00100'],
+  };
+
+  // qr: qrcode-generatorのオブジェクト, scale: 1モジュールのピクセル数(整数)
+  // 戻り値: { width, height, pixels(0/1の配列), palette }
+  function render(qr, scale, signature = SIGNATURE) {
+    const n = qr.getModuleCount();
+    const quiet = 4;
+    const W = (n + quiet * 2) * scale;
+    const textUnits = signature ? signature.length * 6 - 1 : 0; // 文字幅(単位ドット)
+    // 文字の拡大率: モジュールの1/4程度。QRの幅に収まる範囲に抑える
+    const ts = signature
+      ? Math.max(1, Math.min(Math.floor(scale / 4), Math.floor((W - quiet * scale) / textUnits)))
+      : 0;
+    const pad = 2 * ts;
+    const H = W + (signature ? 7 * ts + pad * 2 : 0);
+    const pixels = new Uint8Array(W * H);
+
+    for (let r = 0; r < n; r++) {
+      for (let c = 0; c < n; c++) {
+        if (!qr.isDark(r, c)) continue;
+        const x0 = (c + quiet) * scale;
+        const y0 = (r + quiet) * scale;
+        for (let y = 0; y < scale; y++) {
+          const row = (y0 + y) * W + x0;
+          pixels.fill(1, row, row + scale);
+        }
+      }
+    }
+
+    if (signature) {
+      // 右端をQR本体の右端(静寂領域の内側)にそろえる
+      let x = Math.max(0, W - quiet * scale - textUnits * ts);
+      const y0 = W + pad;
+      for (const ch of signature) {
+        const g = GLYPHS[ch];
+        if (g && x + 5 * ts <= W) {
+          for (let gy = 0; gy < 7; gy++) {
+            for (let gx = 0; gx < 5; gx++) {
+              if (g[gy][gx] !== '1') continue;
+              for (let dy = 0; dy < ts; dy++) {
+                const row = (y0 + gy * ts + dy) * W + x + gx * ts;
+                pixels.fill(1, row, row + ts);
+              }
+            }
+          }
+        }
+        x += 6 * ts;
+      }
+    }
+    return { width: W, height: H, pixels, palette: PALETTE };
+  }
+
+  return { SIGNATURE, PALETTE, render };
+})();
+
+// ---------- GIF ----------
+const QTGif = (() => {
+  // --- LZW圧縮(GIF) ---
+  function lzwEncode(pixels, minCode) {
+    const clear = 1 << minCode;
+    const eoi = clear + 1;
+    let next = eoi + 1;
+    let codeSize = minCode + 1;
+    let dict = new Map();
+    const out = [];
+    let cur = 0;
+    let shift = 0;
+    const emit = (code) => {
+      cur |= code << shift;
+      shift += codeSize;
+      while (shift >= 8) { out.push(cur & 255); cur >>>= 8; shift -= 8; }
+    };
+    emit(clear);
+    let prefix = pixels[0];
+    for (let i = 1; i < pixels.length; i++) {
+      const k = pixels[i];
+      const key = (prefix << 8) | k;
+      const hit = dict.get(key);
+      if (hit !== undefined) { prefix = hit; continue; }
+      emit(prefix);
+      if (next === 4096) { // 表がいっぱいになったらリセット
+        emit(clear);
+        next = eoi + 1;
+        codeSize = minCode + 1;
+        dict = new Map();
+      } else {
+        if (next >= (1 << codeSize)) codeSize++;
+        dict.set(key, next++);
+      }
+      prefix = k;
+    }
+    emit(prefix);
+    emit(eoi);
+    if (shift > 0) out.push(cur & 255);
+    return Uint8Array.from(out);
+  }
+
+  function lzwDecode(data, minCode, count) {
+    const clear = 1 << minCode;
+    const eoi = clear + 1;
+    const prefix = new Uint16Array(4096);
+    const suffix = new Uint8Array(4096);
+    const stack = new Uint8Array(4097);
+    for (let i = 0; i < clear; i++) suffix[i] = i;
+    const out = new Uint8Array(count);
+    let op = 0;
+    let pos = 0;
+    let buf = 0;
+    let bits = 0;
+    let codeSize = minCode + 1;
+    let next = eoi + 1;
+    let prev = -1;
+    let first = 0;
+    while (op < count) {
+      while (bits < codeSize && pos < data.length) { buf |= data[pos++] << bits; bits += 8; }
+      if (bits < codeSize) break;
+      const code = buf & ((1 << codeSize) - 1);
+      buf >>>= codeSize;
+      bits -= codeSize;
+      if (code === clear) { codeSize = minCode + 1; next = eoi + 1; prev = -1; continue; }
+      if (code === eoi) break;
+      if (prev === -1) { first = suffix[code]; out[op++] = first; prev = code; continue; }
+      let c = code;
+      let sp = 0;
+      if (code >= next) {
+        if (code > next) break; // 壊れたデータ
+        stack[sp++] = first;
+        c = prev;
+      }
+      while (c >= clear) { stack[sp++] = suffix[c]; c = prefix[c]; }
+      first = suffix[c];
+      stack[sp++] = first;
+      while (sp > 0 && op < count) out[op++] = stack[--sp];
+      if (next < 4096) {
+        prefix[next] = prev;
+        suffix[next] = first;
+        next++;
+        if (next === (1 << codeSize) && codeSize < 12) codeSize++;
+      }
+      prev = code;
+    }
+    return out;
+  }
+
+  // --- 書き出し ---
+  // palette: [[r,g,b], ...]。delay: 1コマの表示時間(1/100秒)。全コマ同じ大きさ。
+  function createEncoder({ width, height, palette, delay, loop = 0 }) {
+    const chunks = [];
+    const bytes = (...b) => chunks.push(Uint8Array.from(b));
+    const u16 = (n) => [n & 255, (n >> 8) & 255];
+    let bits = 1;
+    while ((1 << bits) < palette.length) bits++;
+    const colors = 1 << bits;
+    const table = [];
+    for (let i = 0; i < colors; i++) table.push(...(palette[i] || [0, 0, 0]));
+    const minCode = Math.max(2, bits);
+
+    bytes(0x47, 0x49, 0x46, 0x38, 0x39, 0x61, ...u16(width), ...u16(height),
+      0x80 | ((bits - 1) << 4) | (bits - 1), 0, 0, ...table);
+    // 無限ループの指定(NETSCAPE2.0)
+    bytes(0x21, 0xFF, 0x0B, ...[...'NETSCAPE2.0'].map((c) => c.charCodeAt(0)), 0x03, 0x01, ...u16(loop), 0x00);
+
+    return {
+      addFrame(pixels) {
+        if (pixels.length !== width * height) throw new Error('フレームの大きさが違います');
+        bytes(0x21, 0xF9, 0x04, 0x04, ...u16(delay), 0x00, 0x00); // 描画後はそのまま(disposal=1)
+        bytes(0x2C, 0, 0, 0, 0, ...u16(width), ...u16(height), 0x00);
+        bytes(minCode);
+        const data = lzwEncode(pixels, minCode);
+        for (let i = 0; i < data.length; i += 255) {
+          const part = data.subarray(i, i + 255);
+          bytes(part.length);
+          chunks.push(part);
+        }
+        bytes(0x00);
+      },
+      finish() {
+        bytes(0x3B);
+        let len = 0;
+        for (const c of chunks) len += c.length;
+        const out = new Uint8Array(len);
+        let o = 0;
+        for (const c of chunks) { out.set(c, o); o += c.length; }
+        return out;
+      },
+    };
+  }
+
+  // --- 読み込み ---
+  function isGif(u8) {
+    return u8.length > 10 && u8[0] === 0x47 && u8[1] === 0x49 && u8[2] === 0x46 && u8[3] === 0x38;
+  }
+
+  // 1コマずつ合成済みのRGBAを返すジェネレータ。メモリを増やさないため、
+  // 返すバッファは使い回す(受け取った側がそのコマの処理を終えてから次へ進む)。
+  // 透明な部分は白として扱う(QRは白地のため)。
+  function* frames(u8) {
+    if (!isGif(u8)) throw new Error('GIFではありません');
+    const u16 = (p) => u8[p] | (u8[p + 1] << 8);
+    const width = u16(6);
+    const height = u16(8);
+    const flags = u8[10];
+    let p = 13;
+    let gct = null;
+    if (flags & 0x80) {
+      const n = 3 << ((flags & 7) + 1);
+      gct = u8.subarray(p, p + n);
+      p += n;
+    }
+    const canvas = new Uint8ClampedArray(width * height * 4).fill(255);
+    const skip = () => { let s; while (p < u8.length && (s = u8[p++]) !== 0) p += s; };
+    let gce = null;
+    let prev = null;
+    let index = 0;
+
+    while (p < u8.length) {
+      const b = u8[p++];
+      if (b === 0x3B) break;
+      if (b === 0x21) { // 拡張ブロック
+        const label = u8[p++];
+        if (label === 0xF9) {
+          const packed = u8[p + 1];
+          gce = { disposal: (packed >> 2) & 7, transparent: (packed & 1) ? u8[p + 4] : -1, delay: u16(p + 2) };
+        }
+        skip();
+        continue;
+      }
+      if (b !== 0x2C) continue; // 不明なバイトは読み飛ばす
+
+      const left = u16(p);
+      const top = u16(p + 2);
+      const w = u16(p + 4);
+      const h = u16(p + 6);
+      const packed = u8[p + 8];
+      p += 9;
+      let ct = gct;
+      if (packed & 0x80) {
+        const n = 3 << ((packed & 7) + 1);
+        ct = u8.subarray(p, p + n);
+        p += n;
+      }
+      const minCode = u8[p++];
+      const parts = [];
+      let total = 0;
+      let s;
+      while (p < u8.length && (s = u8[p++]) !== 0) { parts.push(u8.subarray(p, p + s)); p += s; total += s; }
+      const data = new Uint8Array(total);
+      let o = 0;
+      for (const q of parts) { data.set(q, o); o += q.length; }
+      const idx = lzwDecode(data, minCode, w * h);
+
+      // 前のコマの後始末(disposal)
+      if (prev) {
+        if (prev.disposal === 2) {
+          for (let y = prev.top; y < Math.min(height, prev.top + prev.h); y++) {
+            for (let x = prev.left; x < Math.min(width, prev.left + prev.w); x++) {
+              const o4 = (y * width + x) * 4;
+              canvas[o4] = canvas[o4 + 1] = canvas[o4 + 2] = canvas[o4 + 3] = 255;
+            }
+          }
+        } else if (prev.disposal === 3 && prev.snapshot) {
+          canvas.set(prev.snapshot);
+        }
+      }
+      const disposal = gce ? gce.disposal : 0;
+      const snapshot = disposal === 3 ? canvas.slice() : null;
+      const trans = gce ? gce.transparent : -1;
+
+      // インターレースの行順
+      let order = null;
+      if (packed & 0x40) {
+        order = [];
+        for (const [st, sp] of [[0, 8], [4, 8], [2, 4], [1, 2]]) for (let y = st; y < h; y += sp) order.push(y);
+      }
+      for (let r = 0; r < h; r++) {
+        const dy = top + (order ? order[r] : r);
+        if (dy >= height) continue;
+        for (let x = 0; x < w; x++) {
+          const dx = left + x;
+          if (dx >= width) continue;
+          const ci = idx[r * w + x];
+          if (ci === trans) continue;
+          const o4 = (dy * width + dx) * 4;
+          canvas[o4] = ct ? ct[ci * 3] : 0;
+          canvas[o4 + 1] = ct ? ct[ci * 3 + 1] : 0;
+          canvas[o4 + 2] = ct ? ct[ci * 3 + 2] : 0;
+          canvas[o4 + 3] = 255;
+        }
+      }
+      prev = { disposal, left, top, w, h, snapshot };
+      const delay = gce ? gce.delay : 0;
+      gce = null;
+      yield { rgba: canvas, width, height, delay, index: index++ };
+    }
+  }
+
+  return { isGif, createEncoder, frames };
+})();
+
+if (typeof module !== 'undefined') module.exports = { QTGif, QTImage };
+</script>
 <script>(() => {
   const $ = (id) => document.getElementById(id);
   const css = (v) => getComputedStyle(document.documentElement).getPropertyValue(v).trim();
@@ -12928,6 +13285,9 @@ if (typeof module !== 'undefined') module.exports = QT;
   }
   document.querySelectorAll('[data-tab]').forEach((b) =>
     b.addEventListener('click', () => showTab(b.dataset.tab)));
+  // タブにない画面(セルフテスト)への行き来
+  document.querySelectorAll('[data-go]').forEach((b) =>
+    b.addEventListener('click', () => showTab(b.dataset.go)));
 
   // ---------- QR描画 ----------
   // フレームは英数字モードの文字だけで作ってあるので、バイトモードより粗いQRになる
@@ -12938,27 +13298,21 @@ if (typeof module !== 'undefined') module.exports = QT;
     return qr;
   }
 
-  // 高解像度で描き、表示側で縮める。モジュールの境界は丸めて、幅が揃うようにする。
-  // 静寂領域(周囲の白い余白)は規格どおり4モジュール。
+  // QTImageで1モジュール=整数ピクセルの画像を作り、canvasに出す。
+  // 静寂領域(周囲の白い余白)は規格どおり4モジュール。QRの下に署名の帯がつく。
+  // px: 幅の目安。表示側(CSS)で縮める。
   function drawQR(canvas, qr, px) {
-    px = px || 1000;
-    const n = qr.getModuleCount();
-    const quiet = 4;
-    const ms = px / (n + quiet * 2);
-    if (canvas.width !== px) { canvas.width = px; canvas.height = px; }
-    const ctx = canvas.getContext('2d');
-    ctx.fillStyle = '#ffffff';
-    ctx.fillRect(0, 0, px, px);
-    ctx.fillStyle = '#000000';
-    for (let r = 0; r < n; r++) {
-      const y0 = Math.round((r + quiet) * ms);
-      const h = Math.round((r + quiet + 1) * ms) - y0;
-      for (let c = 0; c < n; c++) {
-        if (!qr.isDark(r, c)) continue;
-        const x0 = Math.round((c + quiet) * ms);
-        ctx.fillRect(x0, y0, Math.round((c + quiet + 1) * ms) - x0, h);
-      }
+    const scale = Math.max(3, Math.round((px || 1000) / (qr.getModuleCount() + 8)));
+    const img = QTImage.render(qr, scale);
+    if (canvas.width !== img.width || canvas.height !== img.height) {
+      canvas.width = img.width;
+      canvas.height = img.height;
     }
+    const ctx = canvas.getContext('2d');
+    const id = ctx.createImageData(img.width, img.height);
+    const px32 = new Uint32Array(id.data.buffer); // リトルエンディアン: 0xAABBGGRR
+    for (let i = 0; i < img.pixels.length; i++) px32[i] = img.pixels[i] ? 0xFF000000 : 0xFFFFFFFF;
+    ctx.putImageData(id, 0, 0);
   }
 
   // 全フレームを同じQRバージョンで描く(最後のフレームだけ小さくなるのを防ぐ)
@@ -12975,7 +13329,20 @@ if (typeof module !== 'undefined') module.exports = QT;
   // ---------- 送信 ----------
   // frames[0]がメタ情報フレーム、1以降がデータフレーム(totalは後者の枚数)。
   // seqは1周の表示順。メタ情報は先頭に2回入れ、受信側が最初に確実に捉えられるようにする。
-  const S = { frames: [], total: 0, seq: [], pos: -1, ecc: 'M', type: 1, playing: false, timer: null, wake: null };
+  const S = { frames: [], total: 0, seq: [], pos: -1, ecc: 'M', type: 1, playing: false, timer: null, wake: null, src: 'text' };
+
+  // 送るもの: テキスト / URL / ファイル。選んだ1つだけ入力欄を出す。
+  function setSrc(kind) {
+    S.src = kind;
+    document.querySelectorAll('[data-src]').forEach((b) =>
+      b.setAttribute('aria-pressed', String(b.dataset.src === kind)));
+    $('srcText').hidden = kind !== 'text';
+    $('srcUrl').hidden = kind !== 'url';
+    $('srcFile').hidden = kind !== 'file';
+    sendMsg('');
+  }
+  document.querySelectorAll('[data-src]').forEach((b) =>
+    b.addEventListener('click', () => setSrc(b.dataset.src)));
 
   // 読み取りやすさのプリセット。QRが粗いほど読みやすいが、全体は遅くなる。
   const PRESETS = {
@@ -12989,6 +13356,11 @@ if (typeof module !== 'undefined') module.exports = QT;
     $('fpsOut').textContent = $('fps').value + ' fps';
   }
 
+  function markPreset(key) {
+    document.querySelectorAll('[data-preset]').forEach((b) =>
+      b.setAttribute('aria-pressed', String(b.dataset.preset === key)));
+  }
+
   function applyPreset(key) {
     const p = PRESETS[key];
     if (!p) return;
@@ -12996,15 +13368,18 @@ if (typeof module !== 'undefined') module.exports = QT;
     $('fps').value = p.fps;
     $('ecc').value = p.ecc;
     syncOutputs();
+    markPreset(key);
   }
 
+  // 詳細設定を手で動かしたら、どのプリセットでもなくなる
   function markCustom() {
     syncOutputs();
-    $('preset').value = 'custom';
+    markPreset(null);
   }
 
-  $('preset').addEventListener('change', () => applyPreset($('preset').value));
-  ['chunk', 'fps'].forEach((id) => $('' + id).addEventListener('input', markCustom));
+  document.querySelectorAll('[data-preset]').forEach((b) =>
+    b.addEventListener('click', () => applyPreset(b.dataset.preset)));
+  ['chunk', 'fps'].forEach((id) => $(id).addEventListener('input', markCustom));
   $('ecc').addEventListener('change', markCustom);
   applyPreset('normal');
 
@@ -13053,6 +13428,7 @@ if (typeof module !== 'undefined') module.exports = QT;
     $('sendNext').disabled = on || !S.total;
     $('sendToggle').disabled = !S.total;
     $('sendFull').disabled = !S.total;
+    $('sendGif').disabled = !S.total;
     if (on) { tick(); holdScreen(true); } else { holdScreen(false); }
   }
 
@@ -13095,26 +13471,25 @@ if (typeof module !== 'undefined') module.exports = QT;
 
   async function startSend() {
     sendMsg('');
-    let name, mime, bytes, meta = null, via = '';
-    const urlStr = $('url').value.trim();
-    const f = $('file').files[0];
-    if (urlStr) {
+    let name, mime, bytes, meta = null;
+    if (S.src === 'url') {
       let u;
       try {
-        u = new URL(urlStr);
+        u = new URL($('url').value.trim());
         if (!/^https?:$/.test(u.protocol)) throw new Error('scheme');
       } catch {
-        sendMsg('URLの形式が正しくありません。https://から入力してください。', true);
+        sendMsg('URLを https:// から入力してください。', true);
         return;
       }
       $('sendStart').disabled = true;
-      sendMsg('取得中です…');
+      sendMsg('取得しています…');
+      let via;
       try {
         const r = await fetchPage(u.href);
         bytes = r.bytes;
         via = r.via;
       } catch (e) {
-        sendMsg('取得できませんでした(' + e.message + ')。プロキシを設定するか、HTMLをテキスト欄に貼って「HTMLとして送る」を使ってください。', true);
+        sendMsg('取得できませんでした(' + e.message + ')。詳細設定のプロキシを確認するか、HTMLをテキストに貼って「HTMLとして送る」を使ってください。', true);
         return;
       } finally {
         $('sendStart').disabled = false;
@@ -13122,15 +13497,17 @@ if (typeof module !== 'undefined') module.exports = QT;
       name = u.hostname + '.html';
       mime = 'text/html';
       meta = { url: u.href };
-      sendMsg('取得しました: ' + fmtBytes(bytes.length) + '(' + via + ')');
-    } else if (f) {
+      sendMsg(via === 'プロキシ' ? 'プロキシ経由で取得しました。' : '');
+    } else if (S.src === 'file') {
+      const f = $('file').files[0];
+      if (!f) { sendMsg('ファイルを選んでください。', true); return; }
       if (f.size > MAX_BYTES) { sendMsg('ファイルが大きすぎます(1MBまで)。', true); return; }
       bytes = new Uint8Array(await f.arrayBuffer());
       name = f.name;
       mime = f.type || 'application/octet-stream';
     } else {
       const t = $('text').value;
-      if (!t) { sendMsg('テキストを入力するか、ファイルを選んでください。', true); return; }
+      if (!t) { sendMsg('テキストを入力してください。', true); return; }
       bytes = new TextEncoder().encode(t);
       const asHtml = $('textIsHtml').checked;
       name = asHtml ? 'page.html' : 'text.txt';
@@ -13152,30 +13529,65 @@ if (typeof module !== 'undefined') module.exports = QT;
       return;
     }
     S.frames = all;
+    S.fileName = name.replace(/\.[^./]+$/, '') || 'qr-transfer';
     S.total = made.total;
     S.seq = [0, ...all.keys()]; // [メタ, メタ, データ1, データ2, …]
     S.pos = -1;
     const fps = Number($('fps').value);
     const cycle = S.seq.length;
     $('sendStage').hidden = false;
+    const side = S.type * 4 + 17;
     $('sendStats').textContent =
-      '元 ' + fmtBytes(bytes.length) + ' → 圧縮後 ' + fmtBytes(payload.length) +
-      ' / メタ情報 + ' + S.total + ' フレーム / QR v' + S.type + ' (' + (S.type * 4 + 17) + '×' + (S.type * 4 + 17) + ')' +
-      ' / 1周 約' + (cycle / fps).toFixed(1) + '秒 / ID ' + made.sid;
+      fmtBytes(bytes.length) + ' → ' + fmtBytes(payload.length) + ' · ' + S.total + '枚 · QR ' + side + '×' + side +
+      ' · 1周 約' + Math.round(cycle / fps) + '秒';
     if (S.total > 300) {
-      sendMsg('フレーム数が多いです(' + S.total + ')。1周に約' + Math.round(cycle / fps) + '秒かかります。データ量や表示速度を上げると短くなります。');
+      sendMsg('フレーム数が多く、1周に約' + Math.round(cycle / fps) + '秒かかります。「高速」にするか、小さいデータで試してください。');
     }
     setPlaying(true);
   }
 
+  // 1周分(メタ情報 + 全フレーム)をGIFアニメにして保存する。
+  // 1コマずつ圧縮して溜めるので、枚数が多くてもメモリは圧縮後のサイズ分だけ。
+  async function exportGif() {
+    if (!S.total) return;
+    const btn = $('sendGif');
+    btn.disabled = true;
+    try {
+      const n = S.type * 4 + 17;
+      const scale = Math.max(3, Math.floor(560 / (n + 8)));
+      const delay = Math.max(2, Math.round(100 / Number($('fps').value))); // 1/100秒
+      let enc = null;
+      for (let i = 0; i < S.seq.length; i++) {
+        const img = QTImage.render(makeQR(S.frames[S.seq[i]], S.ecc, S.type), scale);
+        if (!enc) enc = QTGif.createEncoder({ width: img.width, height: img.height, palette: img.palette, delay });
+        enc.addFrame(img.pixels);
+        if (i % 3 === 2) {
+          sendMsg('GIFを作成しています… ' + (i + 1) + ' / ' + S.seq.length);
+          await new Promise((r) => setTimeout(r, 0));
+        }
+      }
+      const bytes = enc.finish();
+      const url = URL.createObjectURL(new Blob([bytes], { type: 'image/gif' }));
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = S.fileName + '.qr.gif';
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      setTimeout(() => URL.revokeObjectURL(url), 10000);
+      sendMsg('GIFを保存しました(' + fmtBytes(bytes.length) + ')。受信側の「画像から復元」で読み込めます。');
+    } catch (e) {
+      sendMsg('GIFを作成できませんでした: ' + e.message, true);
+    } finally {
+      btn.disabled = !S.total;
+    }
+  }
+
+  $('sendGif').addEventListener('click', exportGif);
   $('sendStart').addEventListener('click', startSend);
   $('sendToggle').addEventListener('click', () => setPlaying(!S.playing));
   $('sendPrev').addEventListener('click', () => stepFrame(-1));
   $('sendNext').addEventListener('click', () => stepFrame(1));
-  $('file').addEventListener('change', () => {
-    if ($('file').files[0]) sendMsg('ファイルを送ります: ' + $('file').files[0].name);
-    else sendMsg('');
-  });
 
   // ---------- 受信 ----------
   const recv = new QT.Receiver();
@@ -13219,11 +13631,10 @@ if (typeof module !== 'undefined') module.exports = QT;
 
   function updateInfo() {
     const parts = [];
-    if (recv.sid) parts.push('ID ' + recv.sid);
     if (recv.badCount) parts.push('破損 ' + recv.badCount);
-    if (recv.otherCount) parts.push('別セッション ' + recv.otherCount);
-    if (scanning && hits.length) parts.push('読取 ' + (hits.length / 2).toFixed(1) + '/秒');
-    $('recvInfo').textContent = parts.length ? parts.join(' / ') : '待機中';
+    if (recv.otherCount) parts.push('別の転送 ' + recv.otherCount);
+    if (scanning && hits.length) parts.push((hits.length / 2).toFixed(1) + '枚/秒');
+    $('recvInfo').textContent = parts.join(' · ');
   }
 
   // 先頭のメタ情報フレームを読んだ時点で、何を受信しているかを表示する
@@ -13231,12 +13642,12 @@ if (typeof module !== 'undefined') module.exports = QT;
     const i = recv.info;
     $('metaCard').hidden = !i;
     if (!i) return;
-    $('metaName').textContent = i.n || '-';
+    $('metaName').textContent = i.n || '名前なし';
     $('metaMime').textContent = i.t || '-';
-    $('metaSize').textContent = fmtBytes(i.s) + (i.z ? '(圧縮後 ' + fmtBytes(i.z) + ')' : '');
+    $('metaSize').textContent = fmtBytes(i.s);
     $('metaFrames').textContent = i.f + ' 枚';
-    $('metaUrl').textContent = i.u || '-';
-    $('metaHash').textContent = i.h ? i.h + '…' : '-';
+    $('metaUrl').textContent = i.u || '';
+    $('metaUrl').hidden = !i.u;
   }
 
   function updateRecvUI() {
@@ -13255,8 +13666,7 @@ if (typeof module !== 'undefined') module.exports = QT;
     $('zoomWrap').hidden = true;
     octx.clearRect(0, 0, overlay.width, overlay.height);
     $('videoIdle').hidden = false;
-    $('camStart').disabled = false;
-    $('camStop').disabled = true;
+    $('camToggle').textContent = 'カメラを開始';
   }
 
   async function startCamera() {
@@ -13280,8 +13690,7 @@ if (typeof module !== 'undefined') module.exports = QT;
     hinted = false;
     hits.length = 0;
     $('videoIdle').hidden = true;
-    $('camStart').disabled = true;
-    $('camStop').disabled = false;
+    $('camToggle').textContent = '停止';
     recvMsg('読み取り中です。');
     scanning = true;
     rafId = requestAnimationFrame(scanLoop);
@@ -13421,7 +13830,7 @@ if (typeof module !== 'undefined') module.exports = QT;
     $('resBadge').textContent = res.ok ? '整合性 OK' : '整合性 NG';
     $('resBadge').className = 'badge ' + (res.ok ? 'ok' : 'ng');
     $('resName').textContent = res.name;
-    $('resSize').textContent = fmtBytes(res.size) + ' (' + res.size + ' bytes)';
+    $('resSize').textContent = fmtBytes(res.size);
     $('resMime').textContent = res.mime;
     $('resHash').textContent = res.hash;
     const isText = /^text\//.test(res.mime) && res.size < 1024 * 1024;
@@ -13496,8 +13905,74 @@ if (typeof module !== 'undefined') module.exports = QT;
     updateRecvUI();
   }
 
-  $('camStart').addEventListener('click', startCamera);
-  $('camStop').addEventListener('click', stopCamera);
+  // ---------- 画像から復元 ----------
+  // GIF(このアプリが書き出したもの)や、QRを写したPNG・JPEG(複数可)を読み込んで復元する。
+  // GIFは1コマずつ展開して読むので、コマ数が多くてもメモリは増えない。
+  const scanRGBA = (rgba, w, h) => {
+    const code = jsQR(rgba, w, h, { inversionAttempts: 'dontInvert' });
+    return code ? code.data : null;
+  };
+  const tick0 = () => new Promise((r) => setTimeout(r, 0));
+
+  async function restoreFromFiles(files) {
+    if (!files.length) return;
+    stopCamera();
+    resetRecv();
+    $('imgBtn').disabled = true;
+    let scanned = 0;
+    let read = 0;
+    const feed = (data) => { if (data && onCode(data) !== 'ignored') read++; };
+    try {
+      recvMsg('画像を読み取っています…');
+      outer: for (const f of files) {
+        const buf = new Uint8Array(await f.arrayBuffer());
+        if (QTGif.isGif(buf)) {
+          for (const fr of QTGif.frames(buf)) {
+            scanned++;
+            feed(scanRGBA(fr.rgba, fr.width, fr.height));
+            if (recv.complete) break outer;
+            if (scanned % 4 === 0) { recvMsg('画像を読み取っています… ' + scanned + ' コマ'); await tick0(); }
+          }
+        } else {
+          const bmp = await createImageBitmap(f);
+          const cv = document.createElement('canvas');
+          cv.width = bmp.width;
+          cv.height = bmp.height;
+          const cx = cv.getContext('2d', { willReadFrequently: true });
+          cx.fillStyle = '#fff';
+          cx.fillRect(0, 0, cv.width, cv.height);
+          cx.drawImage(bmp, 0, 0);
+          scanned++;
+          feed(scanRGBA(cx.getImageData(0, 0, cv.width, cv.height).data, cv.width, cv.height));
+          if (recv.complete) break;
+        }
+      }
+    } catch (e) {
+      recvMsg('画像を読み取れませんでした(' + e.message + ')。GIF・PNG・JPEGを選んでください。', true);
+      return;
+    } finally {
+      $('imgBtn').disabled = false;
+    }
+    if (!recv.complete) {
+      recvMsg(read
+        ? read + ' 枚のQRを読み取りましたが、フレームが足りません(' + recv.count + ' / ' + recv.total + ')。'
+        : 'QRコードを読み取れませんでした。', true);
+    }
+  }
+
+  $('imgBtn').addEventListener('click', () => $('imgIn').click());
+  $('imgIn').addEventListener('change', async () => {
+    const files = [...$('imgIn').files];
+    $('imgIn').value = ''; // 同じファイルをもう一度選べるように
+    await restoreFromFiles(files);
+  });
+
+  // 開始と停止は1つのボタン。起動中の二重クリックは無効にする
+  $('camToggle').addEventListener('click', async () => {
+    if (scanning) { stopCamera(); return; }
+    $('camToggle').disabled = true;
+    try { await startCamera(); } finally { $('camToggle').disabled = false; }
+  });
   $('recvReset').addEventListener('click', resetRecv);
 
   // ---------- セルフテスト ----------
@@ -13558,7 +14033,7 @@ if (typeof module !== 'undefined') module.exports = QT;
       let dups = 0;
       let drops = 0;
       for (const i of order) {
-        if (Math.random() < 0.3) { drops++; continue; }
+        if (i === 0 || Math.random() < 0.3) { drops++; continue; }
         rx.add(decoded[i]);
         if (Math.random() < 0.2) { rx.add(decoded[i]); dups++; }
       }
@@ -13583,6 +14058,24 @@ if (typeof module !== 'undefined') module.exports = QT;
       const hres = await hr.assemble();
       check(hres.ok && hres.mime === 'text/html' && hres.url === 'https://example.com/a/' &&
         new TextDecoder().decode(hres.bytes) === html, 'HTMLと取得元URLが往復で一致');
+
+      // 8) QR右下の署名とGIFの書き出し・読み戻し
+      const sc = 6;
+      const firstImg = QTImage.render(makeQR(frames[0], ecc, type), sc);
+      check(firstImg.height > firstImg.width && firstImg.pixels.subarray(firstImg.width * firstImg.width).some(Boolean),
+        'QRの右下に「' + QTImage.SIGNATURE + '」が入る');
+      let genc = null;
+      const gifTexts = frames.slice(0, 3);
+      for (const t of gifTexts) {
+        const im = QTImage.render(makeQR(t, ecc, type), sc);
+        if (!genc) genc = QTGif.createEncoder({ width: im.width, height: im.height, palette: im.palette, delay: 25 });
+        genc.addFrame(im.pixels);
+      }
+      const gifBytes = genc.finish();
+      const gifBack = [];
+      for (const fr of QTGif.frames(gifBytes)) gifBack.push(scanRGBA(fr.rgba, fr.width, fr.height));
+      check(QTGif.isGif(gifBytes) && gifBack.length === gifTexts.length && gifBack.every((t, i) => t === gifTexts[i]),
+        'GIFに書き出して、読み戻せる(' + fmtBytes(gifBytes.length) + ')');
 
       // 7) 先頭のメタ情報
       const info = {
