@@ -1,0 +1,505 @@
+<!doctype html><html><head><meta charset=utf8><meta name=viewport content="width=device-width,initial-scale=1,viewport-fit=cover"><style>:root{color-scheme:light;box-sizing:border-box;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}html{scroll-padding-top:env(safe-area-inset-top,0px)}body{margin:0;padding:0;font:14px -apple-system,BlinkMacSystemFont,sans-serif;background:#faf9f5;color:#141413}img{max-width:100%}[hidden]:not([hidden=until-found i]){display:none!important}</style></head><body>
+<title>プロンプトジェネレータ</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Dela+Gothic+One&family=JetBrains+Mono:wght@400;500&family=Zen+Kaku+Gothic+New:wght@400;500;700&display=swap">
+<style>
+/* Layout: 左に入力フォーム、右に完成したプロンプト（暗い出力ブロックだけを大胆に見せる）。狭い幅では縦に積む。 */
+:root {
+  --bg: #e9eef2;
+  --surface: #ffffff;
+  --ink: #12202c;
+  --muted: #55687a;
+  --line: #cbd5dd;
+  --accent: #0b6e5f;
+  --accent-ink: #ffffff;
+  --accent-soft: #d7ece8;
+  --out-bg: #12202c;
+  --out-ink: #e4eef5;
+  --out-muted: #8ea3b4;
+  --font-display: "Dela Gothic One", "Hiragino Sans", "Yu Gothic", sans-serif;
+  --font-body: "Zen Kaku Gothic New", "Hiragino Sans", "Yu Gothic", "Meiryo", sans-serif;
+  --font-mono: "JetBrains Mono", ui-monospace, "SF Mono", Menlo, Consolas, "Hiragino Sans", monospace;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #0d1419;
+    --surface: #151f27;
+    --ink: #e3ecf2;
+    --muted: #8fa2b2;
+    --line: #263541;
+    --accent: #3fc1a8;
+    --accent-ink: #04201b;
+    --accent-soft: #12332e;
+    --out-bg: #070c10;
+    --out-ink: #d8e6ee;
+    --out-muted: #6f8596;
+    color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #0d1419;
+  --surface: #151f27;
+  --ink: #e3ecf2;
+  --muted: #8fa2b2;
+  --line: #263541;
+  --accent: #3fc1a8;
+  --accent-ink: #04201b;
+  --accent-soft: #12332e;
+  --out-bg: #070c10;
+  --out-ink: #d8e6ee;
+  --out-muted: #6f8596;
+  color-scheme: dark;
+}
+
+* { box-sizing: border-box; }
+body {
+  background: var(--bg);
+  color: var(--ink);
+  font-family: var(--font-body);
+  font-size: 15px;
+  line-height: 1.7;
+  padding-inline: 16px;
+  padding-block: 28px 56px;
+}
+.wrap { max-width: 1120px; margin-inline: auto; display: flex; flex-direction: column; gap: 24px; }
+
+header { display: flex; flex-direction: column; gap: 6px; }
+h1 {
+  font-family: var(--font-display);
+  font-weight: 400;
+  font-size: clamp(1.7rem, 5vw, 2.6rem);
+  line-height: 1.2;
+  letter-spacing: 0.01em;
+  margin: 0;
+  text-wrap: balance;
+}
+.lead { margin: 0; color: var(--muted); max-width: 40em; }
+
+.presets { display: flex; flex-direction: column; gap: 8px; }
+.label-s {
+  font-size: 12px;
+  letter-spacing: 0.08em;
+  color: var(--muted);
+  font-weight: 700;
+}
+.chips { display: flex; flex-wrap: wrap; gap: 8px; }
+.chip {
+  font: inherit;
+  font-size: 14px;
+  color: var(--ink);
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  padding: 6px 14px;
+  cursor: pointer;
+  transition: background .15s, border-color .15s;
+}
+.chip:hover { border-color: var(--accent); }
+.chip[aria-pressed="true"] { background: var(--accent); color: var(--accent-ink); border-color: var(--accent); }
+.note { margin: 0; font-size: 13px; color: var(--muted); min-height: 1.7em; }
+
+.grid { display: grid; grid-template-columns: minmax(0, 1fr); gap: 20px; align-items: start; }
+@media (min-width: 900px) {
+  .grid { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 28px; }
+  .out-panel { position: sticky; top: 16px; }
+}
+
+.form { background: var(--surface); border: 1px solid var(--line); border-radius: 10px; padding: 20px; display: flex; flex-direction: column; gap: 18px; min-width: 0; }
+.field { display: flex; flex-direction: column; gap: 6px; min-width: 0; }
+.field label, .field .legend { font-weight: 700; font-size: 14px; }
+.hint { font-weight: 400; font-size: 12px; color: var(--muted); margin-left: 6px; }
+.row2 { display: grid; grid-template-columns: minmax(0, 1fr); gap: 18px; }
+@media (min-width: 560px) { .row2 { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); } }
+input[type="text"], textarea, select {
+  font: inherit;
+  font-size: 15px;
+  color: var(--ink);
+  background: var(--bg);
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  padding: 8px 10px;
+  width: 100%;
+  min-width: 0;
+}
+textarea { resize: vertical; min-height: 5.2em; line-height: 1.6; }
+input:focus-visible, textarea:focus-visible, select:focus-visible, button:focus-visible, .seg input:focus-visible + span {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+.checks { display: flex; flex-direction: column; gap: 6px; }
+.check { display: flex; gap: 10px; align-items: flex-start; font-size: 14px; cursor: pointer; }
+.check input { margin-top: 5px; accent-color: var(--accent); }
+.actions { display: flex; justify-content: flex-end; }
+.ghost {
+  font: inherit; font-size: 13px; color: var(--muted); background: none;
+  border: 1px solid var(--line); border-radius: 6px; padding: 6px 12px; cursor: pointer;
+}
+.ghost:hover { color: var(--ink); border-color: var(--muted); }
+
+.out-panel { background: var(--out-bg); color: var(--out-ink); border-radius: 10px; display: flex; flex-direction: column; min-width: 0; overflow: hidden; }
+.out-head { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 10px; padding: 14px 16px; border-bottom: 1px solid color-mix(in srgb, var(--out-ink) 14%, transparent); }
+.seg { display: inline-flex; border: 1px solid color-mix(in srgb, var(--out-ink) 30%, transparent); border-radius: 6px; overflow: hidden; }
+.seg label { cursor: pointer; }
+.seg input { position: absolute; opacity: 0; width: 1px; height: 1px; }
+.seg span { display: block; padding: 5px 12px; font-size: 13px; color: var(--out-muted); }
+.seg input:checked + span { background: var(--out-ink); color: var(--out-bg); font-weight: 700; }
+.copy {
+  font: inherit; font-size: 14px; font-weight: 700;
+  background: var(--accent); color: var(--accent-ink);
+  border: 0; border-radius: 6px; padding: 7px 18px; cursor: pointer;
+}
+.copy:disabled { opacity: .4; cursor: not-allowed; }
+.out-body { padding: 16px; max-height: 60vh; overflow: auto; }
+#out {
+  margin: 0; white-space: pre-wrap; overflow-wrap: anywhere;
+  font-family: var(--font-mono); font-size: 13.5px; line-height: 1.75; color: var(--out-ink);
+}
+#out.empty { color: var(--out-muted); font-family: var(--font-body); }
+.out-foot { display: flex; flex-wrap: wrap; justify-content: space-between; gap: 6px 16px; padding: 10px 16px; font-size: 12.5px; color: var(--out-muted); border-top: 1px solid color-mix(in srgb, var(--out-ink) 14%, transparent); font-variant-numeric: tabular-nums; }
+.status { min-height: 1.5em; }
+
+@media (prefers-reduced-motion: reduce) { * { transition: none !important; } }
+</style>
+
+<div class="wrap">
+  <header>
+    <h1>プロンプトジェネレータ</h1>
+    <p class="lead">役割、依頼内容、制約、出力形式を入力すると、AIに渡せるプロンプトを組み立てます。入力内容はこのブラウザにだけ保存されます。</p>
+  </header>
+
+  <section class="presets" aria-label="テンプレート">
+    <span class="label-s">テンプレートから始める</span>
+    <div class="chips" id="chips"></div>
+    <span class="label-s">コーディングエージェント向け</span>
+    <div class="chips" id="chips-agent"></div>
+    <p class="note" id="note"></p>
+  </section>
+
+  <div class="grid">
+    <form class="form" id="form" autocomplete="off">
+      <div class="row2">
+        <div class="field">
+          <label for="f-role">役割<span class="hint">AIにどんな立場で答えてほしいか</span></label>
+          <input type="text" id="f-role" placeholder="例：経験10年の編集者">
+        </div>
+        <div class="field">
+          <label for="f-audience">想定読者<span class="hint">回答を読む人</span></label>
+          <input type="text" id="f-audience" placeholder="例：他部署のメンバー">
+        </div>
+      </div>
+      <div class="field">
+        <label for="f-task">依頼内容<span class="hint">必須。何をしてほしいか</span></label>
+        <textarea id="f-task" rows="4" placeholder="例：以下の文章を要約してください。"></textarea>
+      </div>
+      <div class="field">
+        <label for="f-context">背景・前提<span class="hint">目的や状況、使う場面</span></label>
+        <textarea id="f-context" rows="3" placeholder="例：社内共有用の資料です。"></textarea>
+      </div>
+      <div class="field">
+        <label for="f-constraints">制約条件<span class="hint">1行に1つ</span></label>
+        <textarea id="f-constraints" rows="4" placeholder="例：専門用語は使わない"></textarea>
+      </div>
+      <div class="row2">
+        <div class="field">
+          <label for="f-format">出力形式</label>
+          <select id="f-format"></select>
+        </div>
+        <div class="field">
+          <label for="f-tone">トーン</label>
+          <select id="f-tone"></select>
+        </div>
+      </div>
+      <div class="field">
+        <label for="f-length">長さ</label>
+        <input type="text" id="f-length" placeholder="例：300字以内">
+      </div>
+      <div class="field">
+        <label for="f-example">例<span class="hint">理想の出力や入力の見本があれば</span></label>
+        <textarea id="f-example" rows="3" placeholder="例：入力：…　出力：…"></textarea>
+      </div>
+      <div class="field">
+        <span class="legend">進め方の指示</span>
+        <div class="checks" id="checks"></div>
+      </div>
+      <div class="actions"><button type="button" class="ghost" id="clear">すべてクリア</button></div>
+    </form>
+
+    <section class="out-panel" aria-label="完成したプロンプト">
+      <div class="out-head">
+        <div class="seg" role="radiogroup" aria-label="書式">
+          <label><input type="radio" name="style" value="md" checked><span>Markdown</span></label>
+          <label><input type="radio" name="style" value="xml"><span>XMLタグ</span></label>
+          <label><input type="radio" name="style" value="plain"><span>見出し付き</span></label>
+        </div>
+        <button type="button" class="copy" id="copy">コピー</button>
+      </div>
+      <div class="out-body"><pre id="out" aria-live="polite"></pre></div>
+      <div class="out-foot">
+        <span id="meter"></span>
+        <span class="status" id="status" role="status"></span>
+      </div>
+    </section>
+  </div>
+</div>
+
+<script>
+(function () {
+  var FORMATS = [
+    ['', '指定なし'], ['bullets', '箇条書き'], ['steps', '番号付きの手順'],
+    ['table', '表（Markdown）'], ['markdown', 'Markdown（見出し付き）'],
+    ['json', 'JSON'], ['paragraph', '文章（段落）'],
+    ['report', '作業報告（変更点・検証結果・残課題）']
+  ];
+  var TONES = [
+    ['', '指定なし'], ['polite', 'です・ます調（丁寧）'], ['plain', 'だ・である調'],
+    ['friendly', 'フレンドリー'], ['direct', '簡潔で率直'], ['formal', 'フォーマル（ビジネス）']
+  ];
+  var OPTS = [
+    ['ask', '不明な点があれば、回答する前に質問してください。'],
+    ['steps', '段階的に考えてから、結論を出してください。'],
+    ['reason', '結論の根拠も示してください。'],
+    ['summary', '最後に要点を3行でまとめてください。'],
+    ['unsure', '確信が持てない内容は、わからないと明示してください。']
+  ];
+  var KEYS = ['role', 'audience', 'task', 'context', 'constraints', 'format', 'tone', 'length', 'example'];
+
+  var PRESETS = [
+    { id: 'summary', name: '要約', v: {
+      role: '編集者', audience: '他部署のメンバー',
+      task: '以下の文章を要約してください。\n（ここに要約したい文章を貼り付け）',
+      context: '社内共有用の資料です。読み手は専門知識のないメンバーです。',
+      constraints: '専門用語は使わない\n原文にない情報を追加しない\n数字と固有名詞は正確に残す',
+      format: 'bullets', tone: 'polite', length: '300字以内', example: '', opts: ['unsure'] } },
+    { id: 'review', name: 'コードレビュー', v: {
+      role: 'シニアソフトウェアエンジニア', audience: '',
+      task: '貼り付けたコードをレビューし、バグ、セキュリティ、保守性の観点で指摘してください。\n（ここにコードを貼り付け）',
+      context: '言語はTypeScript。本番環境で動くAPIサーバーの一部です。',
+      constraints: '重大度（高・中・低）を付ける\n修正案をコードで示す\n好みの問題は「提案」として分けて書く',
+      format: 'markdown', tone: 'direct', length: '', example: '', opts: ['ask', 'reason'] } },
+    { id: 'writing', name: '記事の執筆', v: {
+      role: 'プロのライター', audience: '開発経験1〜3年のエンジニア',
+      task: '技術ブログの記事を書いてください。\nテーマ：（ここにテーマを入力）',
+      context: '個人開発者向けのブログで、読者が手を動かして試せる内容にしたいです。',
+      constraints: '見出しを3〜5個つける\n冒頭に結論を書く\n具体例を1つ以上入れる',
+      format: 'markdown', tone: 'friendly', length: '1500字前後', example: '', opts: ['summary'] } },
+    { id: 'translate', name: '翻訳', v: {
+      role: 'プロの翻訳者', audience: '',
+      task: '次の文章を英語に翻訳してください。\n（ここに原文を貼り付け）',
+      context: '取引先に送るビジネスメールです。',
+      constraints: '直訳せず、自然な表現にする\n固有名詞はそのまま残す\n訳しにくい箇所は注記する',
+      format: 'paragraph', tone: 'formal', length: '', example: '', opts: [] } },
+    { id: 'ideas', name: 'アイデア出し', v: {
+      role: '新規事業の企画担当', audience: '',
+      task: '次のテーマでアイデアを10個出してください。\nテーマ：（ここにテーマを入力）',
+      context: '小さなチームが1か月以内に試作できる範囲に限ります。',
+      constraints: '既存サービスとの違いを一言で添える\n実現の難しさを★1〜3で示す',
+      format: 'table', tone: 'friendly', length: '', example: '', opts: [] } },
+    { id: 'study', name: '学習サポート', v: {
+      role: '家庭教師', audience: '初学者',
+      task: '（学びたいテーマ）を、初心者にもわかるように教えてください。',
+      context: '前提知識はほとんどありません。',
+      constraints: 'たとえ話を使う\n最後に理解度を確かめる問題を3問出す',
+      format: 'steps', tone: 'friendly', length: '', example: '', opts: ['steps', 'ask'] } },
+
+    { id: 'a-feature', name: '機能実装', grp: 'agent', v: {
+      role: 'このリポジトリを担当するシニアエンジニア（コーディングエージェント）', audience: '',
+      task: '次の機能を実装してください。\n（ここに機能の内容と完了条件を書く）\n\n実装に入る前に、関連するファイルを読み、変更計画を短く示してください。',
+      context: '言語・フレームワーク：（例：TypeScript / Next.js）\n関連しそうなパス：（例：src/app/api/）\n既存の似た実装：（例：src/app/api/users/route.ts）',
+      constraints: '変更前に関連ファイルを読み、既存の命名規則とコードスタイルに合わせる\n依頼の範囲外のファイルは変更しない\n新しい依存パッケージは追加する前に確認する\nテスト・lint・型チェックを実行し、結果を報告する\n削除や上書きなど元に戻せない操作は、実行前に確認する',
+      format: 'report', tone: 'direct', length: '', example: '', opts: ['ask', 'steps'] } },
+    { id: 'a-bugfix', name: 'バグ修正', grp: 'agent', v: {
+      role: 'デバッグが得意なシニアエンジニア（コーディングエージェント）', audience: '',
+      task: '次のバグの原因を特定して修正してください。\n症状：（何が起きているか）\n期待する動作：（本来どうなるべきか）\n再現手順：（コマンドや操作）',
+      context: 'エラーメッセージ・ログ：\n（ここに貼り付け）\n最近の変更：（心当たりがあれば）',
+      constraints: '修正の前に、再現できる手順かテストを用意して失敗を確認する\n原因の根拠（該当コードと挙動）を示してから直す\n症状を隠すだけの修正（例外の握りつぶしなど）はしない\n修正後に再現テストが通ることと、既存テストが壊れていないことを確認する\n関係のないリファクタリングはしない',
+      format: 'report', tone: 'direct', length: '', example: '', opts: ['reason', 'unsure'] } },
+    { id: 'a-refactor', name: 'リファクタリング', grp: 'agent', v: {
+      role: 'コード品質に厳しいシニアエンジニア（コーディングエージェント）', audience: '',
+      task: '次の対象を、挙動を変えずにリファクタリングしてください。\n対象：（ファイルやモジュール）\n目的：（例：重複の削減、責務の分離、読みやすさの改善）',
+      context: '既存のテストの場所：（例：tests/）\n公開APIや他から呼ばれる関数は、シグネチャを変えたくありません。',
+      constraints: '最初に既存テストを実行して、現状の結果を記録する\n小さなステップに分けて進め、各ステップの後にテストを実行する\n挙動の変更や機能追加は混ぜない\nテストが足りない箇所は、変更前に特性テストを追加する\n変更の意図が分かるようにコミット単位で区切る',
+      format: 'report', tone: 'direct', length: '', example: '', opts: ['steps', 'ask'] } },
+    { id: 'a-test', name: 'テスト追加', grp: 'agent', v: {
+      role: 'テスト設計に詳しいエンジニア（コーディングエージェント）', audience: '',
+      task: '次の対象に対するテストを追加してください。\n対象：（ファイルや関数）\n重視したい観点：（例：境界値、異常系、権限チェック）',
+      context: 'テストフレームワーク：（例：Vitest）\n既存テストの場所と書き方：（例：tests/ 以下の既存ファイルに合わせる）',
+      constraints: '先に対象コードと既存テストを読み、重複するテストは書かない\n正常系だけでなく、異常系と境界値も含める\n外部サービスやネットワークに依存させず、モックで分離する\n実装の細部ではなく、公開された振る舞いを検証する\n追加したテストを実行して、すべて通ることを確認する',
+      format: 'report', tone: 'direct', length: '', example: '', opts: ['unsure'] } },
+    { id: 'a-explore', name: 'コードベース調査', grp: 'agent', v: {
+      role: 'コードベースを読み解く調査担当（コーディングエージェント）', audience: '',
+      task: '次の点について、このリポジトリを調査して教えてください。\n知りたいこと：（例：認証の流れ、設定の読み込み順、ビルドの仕組み）',
+      context: '目的：（例：修正箇所の見当をつけたい、新メンバーに説明したい）\nコードは変更せず、読み取りだけを行ってください。',
+      constraints: 'ファイルを編集・作成しない\n結論には、根拠となるファイルパスと行の位置を添える\n推測と確認できた事実を分けて書く\n関連する入口（エントリポイント）から順にたどる\n調べきれなかった点は、残課題として挙げる',
+      format: 'markdown', tone: 'direct', length: '', example: '', opts: ['reason', 'unsure', 'summary'] } },
+    { id: 'a-library', name: '新ライブラリ検証', grp: 'agent', v: {
+      role: '技術選定を担当するシニアエンジニア（コーディングエージェント）', audience: '',
+      task: '次のライブラリを、このプロジェクトに導入してよいか検証してください。\nライブラリ名とバージョン：（例：zod 4.x）\n導入の目的：（例：APIの入力検証を型安全にしたい）\n最終的に「採用・見送り・保留」のどれかを、根拠つきで提案してください。',
+      context: '現在使っているもの：（例：自前のバリデーション関数）\n実行環境：（例：Node.js 22 / Next.js 15）\n重視する点：（例：バンドルサイズ、型の推論、保守の継続性）',
+      constraints: '使い方を書く前に、公式ドキュメントとリリースノートで最新バージョンのAPIを確認する（記憶に頼らない）\n最終リリース日、未解決issueの傾向、ライセンス、既知の脆弱性を調べる\nバンドルサイズ、型定義の有無、依存パッケージの数を確認する\n本体のコードや依存関係には手を加えず、使い捨ての検証用ディレクトリかブランチで最小の動作確認を行う\n現在使っているもの、または標準機能と比較し、移行コストと破壊的変更のリスクも挙げる\n確認できた事実と推測を分けて書き、調べきれなかった点は残課題にする',
+      format: 'report', tone: 'direct', length: '', example: '', opts: ['reason', 'unsure', 'ask'] } }
+  ];
+
+  var STORE = 'prompt-generator-v1';
+  var $ = function (id) { return document.getElementById(id); };
+  var out = $('out'), meter = $('meter'), statusEl = $('status'), note = $('note'), copyBtn = $('copy');
+  var activePreset = null, statusTimer = null;
+
+  function fillSelect(el, list) {
+    list.forEach(function (p) {
+      var o = document.createElement('option');
+      o.value = p[0]; o.textContent = p[1]; el.appendChild(o);
+    });
+  }
+  fillSelect($('f-format'), FORMATS);
+  fillSelect($('f-tone'), TONES);
+
+  OPTS.forEach(function (p) {
+    var l = document.createElement('label'); l.className = 'check';
+    var i = document.createElement('input'); i.type = 'checkbox'; i.id = 'o-' + p[0]; i.value = p[0];
+    var s = document.createElement('span'); s.textContent = p[1];
+    l.appendChild(i); l.appendChild(s); $('checks').appendChild(l);
+  });
+
+  PRESETS.forEach(function (p) {
+    var b = document.createElement('button');
+    b.type = 'button'; b.className = 'chip'; b.id = 'chip-' + p.id;
+    b.textContent = p.name; b.setAttribute('aria-pressed', 'false');
+    b.addEventListener('click', function () { applyPreset(p, true); });
+    $(p.grp === 'agent' ? 'chips-agent' : 'chips').appendChild(b);
+  });
+
+  function label(list, v) {
+    for (var i = 0; i < list.length; i++) if (list[i][0] === v) return list[i][1];
+    return '';
+  }
+  function val(k) { return $('f-' + k).value.trim(); }
+  function style() { return document.querySelector('input[name="style"]:checked').value; }
+  function checkedOpts() {
+    return OPTS.filter(function (p) { return $('o-' + p[0]).checked; });
+  }
+  function bullets(text, force) {
+    var lines = text.split('\n').map(function (l) { return l.trim(); }).filter(Boolean);
+    if (lines.length < 2 && !force) return text;
+    return lines.map(function (l) { return '- ' + l.replace(/^[-・*•]\s*/, ''); }).join('\n');
+  }
+
+  function sections() {
+    var s = [];
+    function add(label, tag, body) { if (body) s.push({ label: label, tag: tag, body: body }); }
+    add('役割', 'role', val('role') && ('あなたは' + val('role') + 'です。'));
+    add('依頼内容', 'task', val('task'));
+    add('背景・前提', 'context', val('context'));
+    add('想定読者', 'audience', val('audience'));
+    add('制約条件', 'constraints', bullets(val('constraints'), false));
+    var o = [];
+    if (val('format')) o.push('形式：' + label(FORMATS, val('format')));
+    if (val('tone')) o.push('トーン：' + label(TONES, val('tone')));
+    if (val('length')) o.push('長さ：' + val('length'));
+    add('出力条件', 'output_format', o.map(function (l) { return '- ' + l; }).join('\n'));
+    add('例', 'example', val('example'));
+    add('進め方', 'instructions', checkedOpts().map(function (p) { return '- ' + p[1]; }).join('\n'));
+    return s;
+  }
+
+  function build() {
+    var st = style();
+    return sections().map(function (x) {
+      if (st === 'xml') return '<' + x.tag + '>\n' + x.body + '\n</' + x.tag + '>';
+      if (st === 'plain') return '【' + x.label + '】\n' + x.body;
+      return '## ' + x.label + '\n' + x.body;
+    }).join('\n\n');
+  }
+
+  function render() {
+    var text = val('task') ? build() : '';
+    if (text) {
+      out.textContent = text; out.className = '';
+    } else {
+      out.textContent = '「依頼内容」を入力すると、ここにプロンプトが表示されます。';
+      out.className = 'empty';
+    }
+    copyBtn.disabled = !text;
+    var filled = KEYS.filter(function (k) { return val(k); }).length;
+    meter.textContent = KEYS.length + '項目中 ' + filled + '項目を入力 / ' + (text ? text.length : 0) + '文字';
+    return text;
+  }
+
+  function setActive(id) {
+    activePreset = id;
+    PRESETS.forEach(function (p) {
+      $('chip-' + p.id).setAttribute('aria-pressed', String(p.id === id));
+    });
+  }
+
+  function applyPreset(p, announce) {
+    KEYS.forEach(function (k) { $('f-' + k).value = p.v[k] || ''; });
+    OPTS.forEach(function (o) { $('o-' + o[0]).checked = p.v.opts.indexOf(o[0]) !== -1; });
+    setActive(p.id);
+    note.textContent = '「' + p.name + '」のサンプルを読み込みました。括弧の部分を書き換えて使ってください。';
+    render(); save();
+    if (announce) flash('テンプレートを読み込みました');
+  }
+
+  function save() {
+    try {
+      var d = { v: {}, opts: checkedOpts().map(function (p) { return p[0]; }), style: style(), preset: activePreset };
+      KEYS.forEach(function (k) { d.v[k] = $('f-' + k).value; });
+      localStorage.setItem(STORE, JSON.stringify(d));
+    } catch (e) {}
+  }
+  function load() {
+    try {
+      var raw = localStorage.getItem(STORE);
+      if (!raw) return false;
+      var d = JSON.parse(raw);
+      KEYS.forEach(function (k) { $('f-' + k).value = (d.v && d.v[k]) || ''; });
+      OPTS.forEach(function (o) { $('o-' + o[0]).checked = (d.opts || []).indexOf(o[0]) !== -1; });
+      var r = document.querySelector('input[name="style"][value="' + d.style + '"]');
+      if (r) r.checked = true;
+      setActive(d.preset || null);
+      note.textContent = '前回の入力を復元しました。';
+      return true;
+    } catch (e) { return false; }
+  }
+
+  function flash(msg) {
+    statusEl.textContent = msg;
+    clearTimeout(statusTimer);
+    statusTimer = setTimeout(function () { statusEl.textContent = ''; }, 2400);
+  }
+
+  function selectOutput() {
+    var r = document.createRange(); r.selectNodeContents(out);
+    var s = window.getSelection(); s.removeAllRanges(); s.addRange(r);
+  }
+
+  copyBtn.addEventListener('click', function () {
+    var text = out.textContent;
+    if (out.className === 'empty') return;
+    var fallback = function () { selectOutput(); flash('選択しました。Ctrl+C（Macは⌘C）でコピーしてください'); };
+    if (navigator.clipboard && navigator.clipboard.writeText) {
+      navigator.clipboard.writeText(text).then(function () { flash('コピーしました'); }, fallback);
+    } else { fallback(); }
+  });
+
+  $('form').addEventListener('input', function () {
+    if (activePreset) { setActive(null); }
+    note.textContent = '';
+    render(); save();
+  });
+  Array.prototype.forEach.call(document.querySelectorAll('input[name="style"]'), function (r) {
+    r.addEventListener('change', function () { render(); save(); });
+  });
+  $('clear').addEventListener('click', function () {
+    KEYS.forEach(function (k) { $('f-' + k).value = ''; });
+    OPTS.forEach(function (o) { $('o-' + o[0]).checked = false; });
+    setActive(null); note.textContent = ''; render(); save(); flash('クリアしました');
+  });
+
+  if (!load()) applyPreset(PRESETS[0], false);
+  render();
+})();
+</script>
+
+</body></html>
